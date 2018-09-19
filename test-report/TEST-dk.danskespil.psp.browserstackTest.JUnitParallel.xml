@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dk.danskespil.psp.browserstackTest.JUnitParallel" tests="1" skipped="0" failures="0" errors="0" timestamp="2018-04-06T08:15:53" hostname="mark-ThinkPad-X270-W10DG" time="49.521">
+  <properties/>
+  <testcase name="loginPageTest[0]" classname="dk.danskespil.psp.browserstackTest.JUnitParallel" time="49.521"/>
+  <system-out><![CDATA[Page title is: Siden blev ikke fundet
+]]></system-out>
+  <system-err><![CDATA[Apr 06, 2018 10:16:22 AM org.openqa.selenium.remote.ProtocolHandshake createSession
+INFO: Detected dialect: OSS
+]]></system-err>
+</testsuite>

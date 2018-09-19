@@ -1,0 +1,122 @@
+import groovyx.gpars.GParsPool
+import net.masterthought.cucumber.ReportBuilder
+import net.masterthought.cucumber.Configuration
+import net.masterthought.cucumber.Reportable
+apply plugin: 'groovy'
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'maven'
+
+buildscript {
+    repositories {
+        jcenter()
+        maven { url 'https://plugins.gradle.org/m2/' }
+        maven { url 'https://artifactory.dsservice.eu/artifactory/integration'}
+    }
+    dependencies {
+        classpath "org.codehaus.gpars:gpars:1.2.1",
+                "net.masterthought:cucumber-reporting:3.5.1"
+    }
+}
+
+repositories {
+    mavenCentral()
+
+}
+
+ext.cukesVersion = '1.2.5'
+
+dependencies {
+
+    compile group: 'org.seleniumhq.selenium', name: 'selenium-chrome-driver', version: '3.4.0'
+    compile group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.45.0'
+    compile group: 'net.masterthought', name: 'cucumber-reporting', version: "3.5.1"
+
+    compile group: 'info.cukes', name: 'cucumber-junit', version: "$cukesVersion"
+    compile group: 'info.cukes', name: 'cucumber-core', version: "$cukesVersion"
+    compile group: 'info.cukes', name: 'cucumber-java8', version: "$cukesVersion"
+    compile group: 'org.apache.logging.log4j', name: 'log4j-1.2-api', version: '2.9.1'
+    compile group: 'info.cukes', name: 'cucumber-picocontainer', version: "$cukesVersion"
+
+
+    compile(
+            "org.codehaus.groovy:groovy-all:2.4.7"
+    )
+
+    compile files("$buildDir/classes/test" )
+}
+
+task runInParallel {
+    doLast {
+        def testProperties = "-DsomePropertie=somePropertie"
+        runCucumberTests(testProperties, "~@pending")
+    }
+}
+def runCucumberTests(testProperties, tag) {
+    def features = fileTree(dir: "${project.projectDir}/src/main/java/dk/danskespil/psp/features/").include '**/*.feature'
+
+    GParsPool.withPool(10) {
+        features.eachParallel { File file ->
+            exec {
+                executable "sh"
+                args "-c", "mkdir -p ${reporting.baseDir}/cucumber" +
+                        "&& java ${testProperties} " +
+                        "-cp ${sourceSets.main.runtimeClasspath.asPath} " +
+                        "cucumber.api.cli.Main " +
+                        "${project.projectDir}/src/main/java/dk/danskespil/psp/features/${file.name} " +
+                        "--glue classpath:dk.danskespil.psp.stepDef " +
+                        "--plugin json:${reporting.baseDir}/cucumber/${file.name}.json " +
+                        "--plugin pretty > ${reporting.baseDir}/cucumber/${file.name}.log " +
+                        "--tags ${tag}"
+            }
+            println("${file.name}: Scenario output: ${reporting.baseDir}/cucumber/${file.name}.log ")
+        }
+    }
+    generateReport()
+}
+
+task runInSequence() {
+    doLast {
+        def arglist = ['--plugin', 'pretty', '--tags', '@cucumberTest', '--plugin', "json:${reporting.baseDir}/cucumber/cucumber.json",'--plugin', "html:${reporting.baseDir}/cucumber/cucumber.html",'--glue', 'dk.danskespil.psp.stepDef', 'src/main/java/dk/danskespil/psp/features']
+
+        return javaexec {
+            main = "cucumber.api.cli.Main"
+            classpath = sourceSets.main.runtimeClasspath
+            args = arglist
+        }
+        println("${file.name}: Scenario output: ${reporting.baseDir}/cucumber/${file.name}.log ")
+    }
+    generateReport()
+}
+
+
+def generateReport() {
+    def jsonReports = fileTree(dir: "${reporting.baseDir}/cucumber/").include '**/*.json'.toString()
+    File reportOutputDirectory = new File("${reporting.baseDir}/cucumber");
+
+    List<String> jsonReportFiles = new ArrayList<String>();
+    jsonReports.each { File file ->
+        jsonReportFiles.add("${reporting.baseDir}/cucumber/${file.name}".toString());
+    }
+
+    Configuration configuration = new Configuration(reportOutputDirectory, "payment-service-proxy-acceptancetest");
+    // optional configuration
+    configuration.setParallelTesting(true);
+    configuration.setRunWithJenkins(false);
+    configuration.setBuildNumber("1");
+
+    ReportBuilder reportBuilder = new ReportBuilder(jsonReportFiles, configuration);
+    Reportable result = reportBuilder.generateReports();
+    println("\nReport available on: ${reporting.baseDir}/cucumber/cucumber-html-reports/overview-features.html")
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.2.1'
+}
+task runBrowserStackTest(type: JavaExec){
+    description = 'Testing '
+    group = 'application'
+    main = 'dk.danskespil.psp.browserstackTest.JUnitParallel'
+    classpath = sourceSets.main.runtimeClasspath +  sourceSets.test.output
+}
+
